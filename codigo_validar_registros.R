@@ -143,6 +143,11 @@ validar_archivo <- function(file_path, output_path) {
       if (is.na(valor) || valor == "NULL" || tolower(valor) == "null" || valor == "") {
         errores <- append(errores, paste("Fila", i + 1, "Columna", col, "- valor vacío o inválido."))
       }
+
+      # Validar si hay caracteres extraños o símbolos no estándar 
+      if (grepl("[#©Ã]", valor)) {
+        errores <- c(errores, paste("Fila", i + 1, "columna", col, ": contiene caracteres extraños (# o ©)."))
+      }
       
       # Validar espacios en blanco
       if (col %in% c("occurrenceID", "decimalLatitude", "decimalLongitude", "privateData", "visualizationPrivileges", "day", "month", "year", "coordinateUncertaintyInMeters") && 
