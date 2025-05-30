@@ -24,15 +24,15 @@ library(writexl)
 getwd()
 
 ##Cambiar el directorio principal
-setwd("C:/Users/laura/Downloads/")
+setwd("/directorio/principal")
 
 
 ##Cargar archivo a validar
-file_path<-"C:/Users/laura/Downloads/Anisognathus.melanogenys_records.xlsx"
+file_path<-"/archivo-registros-validar"
 
 
 ##Crear el archivo donde se almacenaran los errores encontrados
-output_path<-'C:/Users/laura/Downloads/errors.txt'
+output_path<-'/ruta-salida'
 
 ########################################################################################################################
 ################################################Validar campos##########################################################
