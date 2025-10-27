@@ -24,10 +24,10 @@ library(writexl)
 getwd()
 
 ##Cambiar el directorio principal
-setwd("/directorio/principal")
+#setwd("/directorio/principal")
 
 ## Rutas
-file_path  <- "C:/Users/laura/Downloads/BDexpertos_15_Oct.csv"
+file_path  <- "C:/Users/laura/Downloads/BDliteratura_21_Oct_excel.xlsx"
 output_dir <- "C:/Users/laura/Downloads"  # carpeta
 
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
@@ -58,7 +58,19 @@ validar_archivo <- function(file_path, output_dir) {
     "county","day","month","year","institutionID","collectionID","locality","minimumElevationInMeters"
   )
   
-  obligatorias <- c("scientificName","decimalLatitude","decimalLongitude","visualizationPrivileges","ID","day","month","year")
+  # >>> Ajuste: ya NO son obligatorias day, month, year <<<
+  obligatorias <- c("scientificName","decimalLatitude","decimalLongitude","visualizationPrivileges","ID")
+  
+  # Helpers
+  to_chr  <- function(x) { y <- as.character(x); y[is.na(y)] <- ""; y }
+  to_num  <- function(x) suppressWarnings(as.numeric(x))
+  is_blank <- function(x) {
+    if (is.null(x)) return(TRUE)
+    x_chr <- trimws(as.character(x))
+    length(x_chr) == 0 || is.na(x_chr) || x_chr == ""
+  }
+  safe_int <- function(x) suppressWarnings(as.integer(x))
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
   
   # 3) Validación de nombres de columnas (SIN detener ejecución)
   validarNombresColumnas <- function(df, requeridas, obligatorias) {
@@ -99,9 +111,6 @@ validar_archivo <- function(file_path, output_dir) {
                                          tipo = "Estructura", mensaje = "El archivo no tiene filas de datos.", valor = NA_character_)))
   }
   
-  to_chr <- function(x) { y <- as.character(x); y[is.na(y)] <- ""; y }
-  to_num <- function(x) suppressWarnings(as.numeric(x))
-  
   cols_en_reglas <- c(
     "occurrenceID","decimalLatitude","decimalLongitude","privateData","visualizationPrivileges",
     "day","month","year","coordinateUncertaintyInMeters","acceptedNameUsage","gbifID","resourceName",
@@ -121,13 +130,15 @@ validar_archivo <- function(file_path, output_dir) {
         valor_chr <- to_chr(data[i, col, drop = TRUE])
         
         # Vacíos/NULL (solo error fuerte si es obligatoria o lo exige la regla)
-        if (valor_chr == "" || toupper(valor_chr) == "NULL") {
+        if (is_blank(valor_chr)) {
           if (col %in% obligatorias || col %in% c("occurrenceID","resourceName","institutionCode","collectionCode",
                                                   "catalogNumber","country","stateProvince","county",
                                                   "verbatimLocality","verbatimElevation","acceptedNameUsage","recordedBy")) {
             errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Vacío/Inválido",
                                                  mensaje = "Campo vacío o 'NULL' (obligatorio para esta regla).", valor = valor_chr)))
           }
+          # Importante: si está vacío y NO es obligatorio, no seguimos con más validaciones de esa celda
+          next
         }
         
         # Caracteres extraños
@@ -146,7 +157,7 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # acceptedNameUsage
-        if (col == "acceptedNameUsage" && (valor_chr == "" || toupper(valor_chr) == "NULL")) {
+        if (col == "acceptedNameUsage" && is_blank(valor_chr)) {
           errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Vacío/Inválido",
                                                mensaje = "acceptedNameUsage vacío.", valor = valor_chr)))
         }
@@ -169,7 +180,7 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # occurrenceID duplicados
-        if (col == "occurrenceID" && valor_chr != "") {
+        if (col == "occurrenceID") {
           dups <- which(to_chr(data[[col]]) == valor_chr)
           if (length(dups) > 1) {
             errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Duplicado",
@@ -179,7 +190,7 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # gbifID dígitos
-        if (col == "gbifID" && valor_chr != "") {
+        if (col == "gbifID") {
           if (!grepl("^\\d+$", valor_chr) || grepl("[., ]", valor_chr)) {
             errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Formato",
                                                  mensaje = "Solo dígitos, sin puntos/comas/espacios.", valor = valor_chr)))
@@ -197,8 +208,7 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # country/stateProvince/county/verbatimLocality
-        if (col %in% c("country","stateProvince","county","verbatimLocality") &&
-            (valor_chr == "" || toupper(valor_chr) == "NULL")) {
+        if (col %in% c("country","stateProvince","county","verbatimLocality") && is_blank(valor_chr)) {
           errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Vacío/Inválido",
                                                mensaje = "Campo vacío.", valor = valor_chr)))
         }
@@ -213,31 +223,38 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # verbatimElevation
-        if (col == "verbatimElevation" && (valor_chr == "" || toupper(valor_chr) == "NULL")) {
+        if (col == "verbatimElevation" && is_blank(valor_chr)) {
           errores <- append(errores, list(list(fila = i + 1, columna = col, tipo = "Vacío/Inválido",
                                                mensaje = "Campo vacío o inválido.", valor = valor_chr)))
         }
         
-        # Fechas
+        # >>> Ajuste: Fechas solo si NO están vacías <<<
         if (col == "day") {
-          if (!(grepl("^\\d{1,2}$", valor_chr) && !is.na(as.integer(valor_chr)) &&
-                as.integer(valor_chr) >= 1 && as.integer(valor_chr) <= 31)) {
-            errores <- append(errores, list(list(fila = i + 1, columna = "day", tipo = "Fecha",
-                                                 mensaje = "Día inválido (1-31).", valor = valor_chr)))
+          if (!is_blank(valor_chr)) {
+            val <- safe_int(valor_chr)
+            if (is.na(val) || val < 1 || val > 31) {
+              errores <- append(errores, list(list(fila = i + 1, columna = "day", tipo = "Fecha",
+                                                   mensaje = "Día inválido (1-31).", valor = valor_chr)))
+            }
           }
         }
         if (col == "month") {
-          if (!(grepl("^\\d{1,2}$", valor_chr) && !is.na(as.integer(valor_chr)) &&
-                as.integer(valor_chr) >= 1 && as.integer(valor_chr) <= 12)) {
-            errores <- append(errores, list(list(fila = i + 1, columna = "month", tipo = "Fecha",
-                                                 mensaje = "Mes inválido (1-12).", valor = valor_chr)))
+          if (!is_blank(valor_chr)) {
+            val <- safe_int(valor_chr)
+            if (is.na(val) || val < 1 || val > 12) {
+              errores <- append(errores, list(list(fila = i + 1, columna = "month", tipo = "Fecha",
+                                                   mensaje = "Mes inválido (1-12).", valor = valor_chr)))
+            }
           }
         }
         if (col == "year") {
-          yy <- to_num(valor_chr)
-          if (is.na(yy) || yy > as.numeric(format(Sys.Date(), "%Y"))) {
-            errores <- append(errores, list(list(fila = i + 1, columna = "year", tipo = "Fecha",
-                                                 mensaje = "Año inválido o mayor al año actual.", valor = valor_chr)))
+          if (!is_blank(valor_chr)) {
+            yy <- safe_int(valor_chr)
+            # Ajusta mínimo si lo necesitas (ej. 1500)
+            if (is.na(yy) || yy < 1500 || yy > current_year) {
+              errores <- append(errores, list(list(fila = i + 1, columna = "year", tipo = "Fecha",
+                                                   mensaje = paste0("Año inválido (1500–", current_year, ")."), valor = valor_chr)))
+            }
           }
         }
         
@@ -251,7 +268,7 @@ validar_archivo <- function(file_path, output_dir) {
         }
         
         # recordedBy
-        if (col == "recordedBy" && valor_chr == "") {
+        if (col == "recordedBy" && is_blank(valor_chr)) {
           errores <- append(errores, list(list(fila = i + 1, columna = "recordedBy", tipo = "Vacío/Inválido",
                                                mensaje = "Campo vacío.", valor = valor_chr)))
         }
@@ -314,7 +331,9 @@ validar_archivo <- function(file_path, output_dir) {
   ))
 }
 
+
 ## Ejecutar
 validar_archivo(file_path, output_dir)
+
 
 
